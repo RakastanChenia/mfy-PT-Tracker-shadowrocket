@@ -1,0 +1,14 @@
+#!name=MFY PT Tracker 自动上报
+#!desc=自动上传国服活动PT/排名数据
+#!homepage=https://github.com/RakastanChenia/mfy-PT-Tracker-shadowrocket
+
+[MITM]
+hostname = %APPEND% mkcn-prod-public-60001-1.dailygn.com, mkcn-prod-public-60001-2.dailygn.com
+
+[Script]
+mfy-upload-tutorial = type=http-response,pattern=^https://mkcn-prod-public-60001-(1|2)\.dailygn\.com/api/user/\d+/mysekai/tutorial/harvest$,requires-body=1,binary-body-mode=1,max-size=100000000,timeout=60,script-path=https://raw.githubusercontent.com/RakastanChenia/mfy-PT-Tracker-shadowrocket/main/mfy-upload.js
+mfy-upload-harvest = type=http-response,pattern=^https://mkcn-prod-public-60001-(1|2)\.dailygn\.com/api/user/\d+/mysekai/harvest$,requires-body=1,binary-body-mode=1,max-size=100000000,timeout=60,script-path=https://raw.githubusercontent.com/RakastanChenia/mfy-PT-Tracker-shadowrocket/main/mfy-upload.js
+mfy-upload-live = type=http-response,pattern=^https://mkcn-prod-public-60001-(1|2)\.dailygn\.com/api/user/\d+/live/[^?]+$,requires-body=1,binary-body-mode=1,max-size=100000000,timeout=60,script-path=https://raw.githubusercontent.com/RakastanChenia/mfy-PT-Tracker-shadowrocket/main/mfy-upload.js
+mfy-upload-multi = type=http-response,pattern=^https://mkcn-prod-public-60001-(1|2)\.dailygn\.com/api/user/\d+/multi-live/[^?]+$,requires-body=1,binary-body-mode=1,max-size=100000000,timeout=60,script-path=https://raw.githubusercontent.com/RakastanChenia/mfy-PT-Tracker-shadowrocket/main/mfy-upload.js
+mfy-upload-challenge = type=http-response,pattern=^https://mkcn-prod-public-60001-(1|2)\.dailygn\.com/api/user/\d+/challenge-live/solo/[^?]+$,requires-body=1,binary-body-mode=1,max-size=100000000,timeout=60,script-path=https://raw.githubusercontent.com/RakastanChenia/mfy-PT-Tracker-shadowrocket/main/mfy-upload.js
+mfy-upload-rank = type=http-response,pattern=^https://mkcn-prod-public-60001-(1|2)\.dailygn\.com/api/user/\d+/rank-match-season/\d+/live/[^?]+\?type=result$,requires-body=1,binary-body-mode=1,max-size=100000000,timeout=60,script-path=https://raw.githubusercontent.com/RakastanChenia/mfy-PT-Tracker-shadowrocket/main/mfy-upload.js
