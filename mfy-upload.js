@@ -1,4 +1,4 @@
-const upload_url = "http://172.86.81.97:8000/api/raw";
+const upload_url = "http://168.138.217.249:8000/api/raw";
 const chunkSize = 1 * 1024 * 1024; // 1MB
 
 const body = (typeof $response !== "undefined" && $response.body) ? $response.body : "";
