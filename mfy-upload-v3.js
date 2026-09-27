@@ -7,7 +7,7 @@
 // 重传语义：同一个 X-Upload-Id + X-Chunk-Index 是幂等的；服务端按编号覆盖保存。
 // 服务端 /api/raw2 还会记录 upload_id 的 processing/done 状态，防止“最后一个 200 回执丢失后重传”导致重复创建已完成上传。
 
-const UPLOAD_VERSION = "v3-64k-parallel-retry3";
+const UPLOAD_VERSION = "v3-64k-parallel-retry3-sanjose";   // 2026-09-27 起上传端点在圣何塞；日志里看到这个后缀=已拿到新脚本
 
 const upload_url = "http://167.234.217.255:8000/api/raw2";
 const chunkSize  = 64 * 1024;   // 64KB
