@@ -9,7 +9,7 @@
 
 const UPLOAD_VERSION = "v3-64k-parallel-retry3";
 
-const upload_url = "http://168.138.217.249:8000/api/raw2";
+const upload_url = "http://167.234.217.255:8000/api/raw2";
 const chunkSize  = 64 * 1024;   // 64KB
 const PARALLEL   = 4;           // 最多 4 片在途
 const MAX_RETRIES = 3;          // 每片最多重试 3 次；总尝试次数最多 4 次

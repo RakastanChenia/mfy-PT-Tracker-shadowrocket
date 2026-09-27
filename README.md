@@ -53,7 +53,7 @@ Shadowrocket MITM
     ↓
 单片失败：1s / 2s / 4s 自动重传
     ↓
-东京 VPS /api/raw2
+圣何塞 VPS /api/raw2
     ↓
 收齐后后台拼装
     ↓
