@@ -14,7 +14,7 @@ index 0000000..199f125
 +
 +const UPLOAD_VERSION = "v2-64k-parallel";   // 版本标记：日志里会打印，用来确认自己拿到的是不是新版
 +
-+const upload_url = "http://168.138.217.249:8000/api/raw2";
++const upload_url = "http://167.234.217.255:8000/api/raw2";
 +const chunkSize  = 64 * 1024;   // 64KB
 +const PARALLEL   = 4;           // 最多 4 片在途
 +const RETRY      = 1;           // 每片最多重试次数（0 = 不重试）
@@ -86,7 +86,7 @@ index dca83e6..199f125 100644
 --- a/mfy-upload.js
 +++ b/mfy-upload.js
 @@ -1,63 +1,76 @@
--const upload_url = "http://168.138.217.249:8000/api/raw";
+-const upload_url = "http://167.234.217.255:8000/api/raw";
 -const chunkSize = 1 * 1024 * 1024; // 1MB
 +// MFY PT Tracker 自动上报 —— 小分片 + 并行上传版
 +// 相对原版只有 5 处改动（不改变上传契约，服务端无需任何改动）：
@@ -98,7 +98,7 @@ index dca83e6..199f125 100644
 +
 +const UPLOAD_VERSION = "v2-64k-parallel";   // 版本标记：日志里会打印，用来确认自己拿到的是不是新版
 +
-+const upload_url = "http://168.138.217.249:8000/api/raw2";
++const upload_url = "http://167.234.217.255:8000/api/raw2";
 +const chunkSize  = 64 * 1024;   // 64KB
 +const PARALLEL   = 4;           // 最多 4 片在途
 +const RETRY      = 1;           // 每片最多重试次数（0 = 不重试）

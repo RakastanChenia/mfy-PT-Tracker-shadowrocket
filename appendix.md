@@ -3,6 +3,7 @@
 > 面向 `RakastanChenia/mfy-PT-Tracker-shadowrocket`
 > 影响文件：`mfy-upload.js`（分片与上传逻辑）
 > 服务端：**无需任何额外改动**（详见第四节）
+> 端点已于 2026-09-27 从东京迁至圣何塞（文中 IP 已同步为现行端点）；第三、四节的实测数据是迁移前在东京链路上采集的。
 
 ---
 
@@ -20,7 +21,7 @@
 ## 二、现状：代码事实
 
 ```js
- 1| const upload_url = "http://168.138.217.249:8000/api/raw";   // 同步处理：客户端要等后端解密+解析+写库
+ 1| const upload_url = "http://167.234.217.255:8000/api/raw";   // 同步处理：客户端要等后端解密+解析+写库
  2| const chunkSize = 1 * 1024 * 1024; // 1MB                    // 阈值 > 实际包体 → 永远只有 1 片
 13| const totalChunks = Math.ceil(body.length / chunkSize);
 41| $httpClient.post(options, (error, resp, data) => {
@@ -37,7 +38,7 @@
 
 ## 三、实测数据
 
-**测量环境**：同一条链路（上海宿舍 → 东京 VPS `168.138.217.249:8000`）、同一个服务端、同一份 `multi-live` 响应（约 194KB）。
+**测量环境**：同一条链路（上海宿舍 → 圣何塞 VPS `167.234.217.255:8000`）、同一个服务端、同一份 `multi-live` 响应（约 194KB）。
 客户端不是 Shadowrocket 本体，而是一个遵守**完全相同契约**的自建客户端（同样的 5 个请求头、同样的分片语义）。
 **两组数据的分片变量是唯一差异，接口均已指向 `/api/raw2`**，因此可直接对比「分片策略」这一项：
 
@@ -68,9 +69,9 @@
 ## 五、建议改动（约 6 行）
 
 ```diff
--const upload_url = "http://168.138.217.249:8000/api/raw";
+-const upload_url = "http://167.234.217.255:8000/api/raw";
 -const chunkSize = 1 * 1024 * 1024; // 1MB
-+const upload_url = "http://168.138.217.249:8000/api/raw2";   // 可选：异步接口，回执毫秒级
++const upload_url = "http://167.234.217.255:8000/api/raw2";   // 可选：异步接口，回执毫秒级
 +const chunkSize = 64 * 1024;        // 64KB：小包也能切片，重试代价低
 +const PARALLEL = 4;                 // 最多 4 片在途
 ```
@@ -78,7 +79,7 @@
 完整替换（保留原有 5 个请求头不变，只把「串行推进」换成「滑动窗口补位」）：
 
 ```js
-const upload_url = "http://168.138.217.249:8000/api/raw2";
+const upload_url = "http://167.234.217.255:8000/api/raw2";
 const chunkSize = 64 * 1024;   // 64KB
 const PARALLEL  = 4;           // 最多 4 片在途
 
