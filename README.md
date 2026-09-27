@@ -8,8 +8,6 @@
 
 - `mfy.sgmodule`：模块配置；6 个 PJSK Response 规则全部指向 `mfy-upload-v3.js`。
 - `mfy-upload-v3.js`：64KB 分片、最多 4 片并行、每片最多重试 3 次（总尝试最多 4 次）。
-- `mfy-upload-v2.js`：保留并同步为新版内容，兼容已经引用旧文件名的安装。
-- `mfy-upload.js`：同样同步为新版内容，兼容旧安装。
 
 重新导入模块后，看日志中的：
 
@@ -30,7 +28,7 @@ chunk 2 ok on attempt 2
 
 ## 服务端
 
-需要使用配套的 `app_retry3.py` 替换原 `app.py`（或者把其中的 `/api/raw2` 改动合并进去）。
+服务端 `app.py` 已内置下述 `/api/raw2` 幂等处理，客户端直接使用即可，无需替换服务端文件。
 
 服务端新增：
 
