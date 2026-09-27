@@ -75,6 +75,7 @@ function sendChunk(index) {
     url: upload_url,
     headers: {
       "X-Original-Url": url,
+      "X-Upload-Version": UPLOAD_VERSION,
       "X-Upload-Id": upload_id,
       "X-Chunk-Index": String(index),
       "X-Total-Chunks": String(totalChunks),
