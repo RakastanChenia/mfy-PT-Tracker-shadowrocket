@@ -1,11 +1,10 @@
-// MFY PT Tracker 自动上报 —— v4 base64 分片版
+// MFY PT Tracker 自动上报 —— v4.1 诊断版
 //
-// v4 修复点：
-// 1. 只上传目标 PJSK 接口，避免非目标响应产生 rejected 噪声；
-// 2. 响应体先 Base64 编码再分片，避免二进制 AES 密文被 JS 字符串/UTF-8 损坏；
-// 3. 服务端 /api/raw2 组装后先 Base64 解码，再 AES 解密。
+// 1. 每一步都打日志，方便定位到底断在哪；
+// 2. 兼容 body / bodyBytes 为 ArrayBuffer、Uint8Array、base64 字符串、raw 字符串；
+// 3. 只上传模块 pattern 匹配到的目标响应。
 
-const UPLOAD_VERSION = "v4-64k-parallel-base64-filter-sanjose";
+const UPLOAD_VERSION = "v4.1-64k-parallel-base64-debug";
 
 const upload_url = "http://167.234.217.255:8000/api/raw2";
 const chunkSize  = 64 * 1024;   // 64KB
@@ -91,51 +90,89 @@ function stringToBase64(s) {
   return bytesToBase64(bytes);
 }
 
+function looksLikeBase64(s) {
+  if (typeof s !== "string") return false;
+  const clean = s.replace(/[\r\n\t ]/g, "");
+  return clean.length > 0 && clean.length % 4 === 0 && /^[A-Za-z0-9+/]*={0,2}$/.test(clean);
+}
+
 function getBase64Body() {
-  try {
-    if (typeof $response !== "undefined" && $response.bodyBytes) {
-      const bb = $response.bodyBytes;
-
-      if (typeof ArrayBuffer !== "undefined" && bb instanceof ArrayBuffer) {
-        return bytesToBase64(new Uint8Array(bb));
-      }
-      if (typeof Uint8Array !== "undefined" && bb instanceof Uint8Array) {
-        return bytesToBase64(bb);
-      }
-      if (typeof bb === "string") {
-        const clean = bb.replace(/\s/g, "");
-        if (/^[A-Za-z0-9+/=]+$/.test(clean)) {
-          return clean;
-        }
-      }
-    }
-  } catch (e) {}
-
-  if (typeof $response !== "undefined" && $response.body) {
-    return stringToBase64(String($response.body));
+  const resp = (typeof $response !== "undefined") ? $response : null;
+  if (!resp) {
+    log("FATAL: no $response object");
+    return { data: "", source: "none" };
   }
 
-  return "";
+  const bb = resp.bodyBytes;
+  if (bb) {
+    if (typeof ArrayBuffer !== "undefined" && bb instanceof ArrayBuffer) {
+      return { data: bytesToBase64(new Uint8Array(bb)), source: "bodyBytes:ArrayBuffer:" + bb.byteLength };
+    }
+    if (typeof Uint8Array !== "undefined" && bb instanceof Uint8Array) {
+      return { data: bytesToBase64(bb), source: "bodyBytes:Uint8Array:" + bb.length };
+    }
+    if (typeof bb === "string") {
+      if (looksLikeBase64(bb)) {
+        return { data: bb.replace(/[\r\n\t ]/g, ""), source: "bodyBytes:base64-string:" + bb.length };
+      }
+      return { data: stringToBase64(bb), source: "bodyBytes:raw-string:" + bb.length };
+    }
+    log("WARN: bodyBytes unknown type=" + (typeof bb));
+  }
+
+  const b = resp.body;
+  if (b) {
+    if (typeof ArrayBuffer !== "undefined" && b instanceof ArrayBuffer) {
+      return { data: bytesToBase64(new Uint8Array(b)), source: "body:ArrayBuffer:" + b.byteLength };
+    }
+    if (typeof Uint8Array !== "undefined" && b instanceof Uint8Array) {
+      return { data: bytesToBase64(b), source: "body:Uint8Array:" + b.length };
+    }
+    if (typeof b === "string") {
+      if (looksLikeBase64(b)) {
+        return { data: b.replace(/[\r\n\t ]/g, ""), source: "body:base64-string:" + b.length };
+      }
+      return { data: stringToBase64(b), source: "body:raw-string:" + b.length };
+    }
+    log("WARN: body unknown type=" + (typeof b));
+  }
+
+  return { data: "", source: "empty" };
 }
 
-const url = (typeof $request !== "undefined" && $request.url)
-  ? String($request.url)
-  : "";
+let url = "";
+try {
+  url = (typeof $request !== "undefined" && $request.url)
+    ? String($request.url)
+    : "";
+} catch (e) {
+  log("FATAL: read $request.url failed: " + e);
+}
 
-if (!url || !isTargetUrl(url)) {
-  console.log("[mfy] skip non-target url=" + url);
+log("trigger url=" + url);
+
+if (!url) {
+  log("FATAL: $request.url is empty, cannot upload");
   $done({});
   return;
 }
 
-const bodyB64 = getBase64Body();
-
-if (!bodyB64 || bodyB64.length === 0) {
-  console.log("[mfy] no response body");
+if (!isTargetUrl(url)) {
+  log("SKIP: url not target: " + url);
   $done({});
   return;
 }
 
+const bodyInfo = getBase64Body();
+log("body source=" + bodyInfo.source + ", base64Len=" + bodyInfo.data.length);
+
+if (!bodyInfo.data || bodyInfo.data.length === 0) {
+  log("FATAL: no response body data");
+  $done({});
+  return;
+}
+
+const bodyB64 = bodyInfo.data;
 const upload_id   = Math.random().toString(36).substr(2, 9);
 const totalChunks = Math.ceil(bodyB64.length / chunkSize);
 const retryCount = {};
@@ -144,14 +181,13 @@ let started = 0;
 let completed = 0;
 let failed = 0;
 
-log("version=" + UPLOAD_VERSION + ", chunks=" + totalChunks + ", base64Bytes=" + bodyB64.length);
-log("url=" + url);
+log("version=" + UPLOAD_VERSION + ", upload_id=" + upload_id + ", chunks=" + totalChunks + ", base64Bytes=" + bodyB64.length);
 
 function finishOne(index) {
   completed++;
   if (completed !== totalChunks) return;
 
-  log("done, failed=" + failed + "/" + totalChunks);
+  log("ALL_CHUNKS_DONE upload_id=" + upload_id + ", failed=" + failed + "/" + totalChunks);
   $done({});
 }
 
@@ -178,23 +214,24 @@ function sendChunk(index) {
     const ok = !error && status === 200;
 
     if (!ok) {
+      log("chunk " + (index + 1) + "/" + totalChunks + " attempt " + attempt + " failed: " + errorText(error, resp));
+
       if (isRetryable(error, resp) && (retryCount[index] || 0) < MAX_RETRIES) {
         retryCount[index] = (retryCount[index] || 0) + 1;
         const delay = RETRY_DELAY_MS[Math.min(retryCount[index] - 1, RETRY_DELAY_MS.length - 1)];
-
-        log("chunk " + (index + 1) + " failed on attempt " + attempt + " (" + errorText(error, resp) + "), retry " + retryCount[index] + " in " + delay + "ms");
+        log("chunk " + (index + 1) + " retry " + retryCount[index] + " in " + delay + "ms");
         setTimeout(() => sendChunk(index), delay);
         return;
       }
 
       failed++;
-      log("chunk " + (index + 1) + " permanently failed after attempt " + attempt + ": " + errorText(error, resp));
+      log("chunk " + (index + 1) + " permanently failed");
       finishOne(index);
       if (started < totalChunks) sendChunk(started++);
       return;
     }
 
-    log("chunk " + (index + 1) + " ok on attempt " + attempt + (data ? " response=" + String(data).slice(0, 120) : ""));
+    log("chunk " + (index + 1) + "/" + totalChunks + " ok attempt=" + attempt + (data ? " resp=" + String(data).slice(0, 120) : ""));
     finishOne(index);
     if (completed < totalChunks && started < totalChunks) sendChunk(started++);
   });
