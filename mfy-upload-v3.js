@@ -1,38 +1,25 @@
-// MFY PT Tracker 自动上报 —— 小分片 + 并行 + 应用层重传版
+// MFY PT Tracker 自动上报 —— v4 base64 分片版
 //
-// 发送链路：
-//   PJSK Response -> 64KB 分片 -> 最多 4 片并行 -> HTTP POST /api/raw2
-//   单片网络错误/可重试 HTTP 状态 -> 自动重试，最多 3 次（总计最多 4 次尝试）
-//
-// 重传语义：同一个 X-Upload-Id + X-Chunk-Index 是幂等的；服务端按编号覆盖保存。
-// 服务端 /api/raw2 还会记录 upload_id 的 processing/done 状态，防止“最后一个 200 回执丢失后重传”导致重复创建已完成上传。
+// v4 修复点：
+// 1. 只上传目标 PJSK 接口，避免非目标响应产生 rejected 噪声；
+// 2. 响应体先 Base64 编码再分片，避免二进制 AES 密文被 JS 字符串/UTF-8 损坏；
+// 3. 服务端 /api/raw2 组装后先 Base64 解码，再 AES 解密。
 
-const UPLOAD_VERSION = "v3-64k-parallel-retry3-sanjose";   // 2026-09-27 起上传端点在圣何塞；日志里看到这个后缀=已拿到新脚本
+const UPLOAD_VERSION = "v4-64k-parallel-base64-filter-sanjose";
 
 const upload_url = "http://167.234.217.255:8000/api/raw2";
 const chunkSize  = 64 * 1024;   // 64KB
-const PARALLEL   = 4;           // 最多 4 片在途
-const MAX_RETRIES = 3;          // 每片最多重试 3 次；总尝试次数最多 4 次
+const PARALLEL   = 4;
+const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = [1000, 2000, 4000];
 
-const body = (typeof $response !== "undefined" && $response.body) ? $response.body : "";
-const url  = (typeof $request  !== "undefined" && $request.url)  ? $request.url : "";
-
-if (!body || body.length === 0) {
-  console.log("[mfy] no response body");
-  $done({});
-  return;
-}
-
-const upload_id   = Math.random().toString(36).substr(2, 9);
-const totalChunks = Math.ceil(body.length / chunkSize);
-const retryCount = {};
-let started = 0;
-let completed = 0;
-let failed = 0;
+const TARGET_HOSTS = {
+  "mkcn-prod-public-60001-1.dailygn.com": true,
+  "mkcn-prod-public-60001-2.dailygn.com": true
+};
 
 function log(message) {
-  console.log("[mfy-upload] [" + upload_id + "] " + message);
+  console.log("[mfy-upload] " + message);
 }
 
 function statusOf(resp) {
@@ -46,16 +33,118 @@ function errorText(error, resp) {
 }
 
 function isRetryable(error, resp) {
-  // 网络错误 / 没有收到响应：重试。
   if (error || !resp) return true;
-
-  // 408 Request Timeout、425 Too Early、429 Too Many Requests、5xx 服务端错误：重试。
-  // 4xx 参数错误等永久性错误不重复打，避免无意义请求。
   const status = statusOf(resp);
   return status === 408 || status === 425 || status === 429 || status >= 500;
 }
 
-log("version=" + UPLOAD_VERSION + ", chunks=" + totalChunks + ", bytes=" + body.length);
+function isTargetUrl(url) {
+  try {
+    url = String(url);
+    const m = url.match(/^https?:\/\/([^\/?#]+)([^?#]*)/i);
+    if (!m) return false;
+
+    const host = m[1].toLowerCase().split(":")[0];
+    if (!TARGET_HOSTS[host]) return false;
+
+    const path = m[2].split("?")[0];
+    if (path.indexOf("/api/user/") !== 0) return false;
+
+    if (path.indexOf("/mysekai/harvest") >= 0) return true;
+    if (path.indexOf("/mysekai/tutorial/harvest") >= 0) return true;
+    if (path.indexOf("/multi-live/") >= 0) return true;
+
+    if (path.indexOf("/rank-match-season/") >= 0) {
+      return path.indexOf("/live/") >= 0 && url.indexOf("type=result") >= 0;
+    }
+
+    if (path.indexOf("/live/") >= 0) return true;
+    if (path.indexOf("/challenge-live/solo/") >= 0) return true;
+
+    return false;
+  } catch (e) {
+    return false;
+  }
+}
+
+function bytesToBase64(u8) {
+  const B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  let out = "";
+  for (let i = 0; i < u8.length; i += 3) {
+    const b1 = u8[i];
+    const b2 = i + 1 < u8.length ? u8[i + 1] : 0;
+    const b3 = i + 2 < u8.length ? u8[i + 2] : 0;
+
+    out += B64[b1 >> 2];
+    out += B64[((b1 & 3) << 4) | (b2 >> 4)];
+    out += (i + 1 < u8.length) ? B64[((b2 & 15) << 2) | (b3 >> 6)] : "=";
+    out += (i + 2 < u8.length) ? B64[b3 & 63] : "=";
+  }
+  return out;
+}
+
+function stringToBase64(s) {
+  const bytes = new Uint8Array(s.length);
+  for (let i = 0; i < s.length; i++) {
+    bytes[i] = s.charCodeAt(i) & 0xff;
+  }
+  return bytesToBase64(bytes);
+}
+
+function getBase64Body() {
+  try {
+    if (typeof $response !== "undefined" && $response.bodyBytes) {
+      const bb = $response.bodyBytes;
+
+      if (typeof ArrayBuffer !== "undefined" && bb instanceof ArrayBuffer) {
+        return bytesToBase64(new Uint8Array(bb));
+      }
+      if (typeof Uint8Array !== "undefined" && bb instanceof Uint8Array) {
+        return bytesToBase64(bb);
+      }
+      if (typeof bb === "string") {
+        const clean = bb.replace(/\s/g, "");
+        if (/^[A-Za-z0-9+/=]+$/.test(clean)) {
+          return clean;
+        }
+      }
+    }
+  } catch (e) {}
+
+  if (typeof $response !== "undefined" && $response.body) {
+    return stringToBase64(String($response.body));
+  }
+
+  return "";
+}
+
+const url = (typeof $request !== "undefined" && $request.url)
+  ? String($request.url)
+  : "";
+
+if (!url || !isTargetUrl(url)) {
+  console.log("[mfy] skip non-target url=" + url);
+  $done({});
+  return;
+}
+
+const bodyB64 = getBase64Body();
+
+if (!bodyB64 || bodyB64.length === 0) {
+  console.log("[mfy] no response body");
+  $done({});
+  return;
+}
+
+const upload_id   = Math.random().toString(36).substr(2, 9);
+const totalChunks = Math.ceil(bodyB64.length / chunkSize);
+const retryCount = {};
+
+let started = 0;
+let completed = 0;
+let failed = 0;
+
+log("version=" + UPLOAD_VERSION + ", chunks=" + totalChunks + ", base64Bytes=" + bodyB64.length);
 log("url=" + url);
 
 function finishOne(index) {
@@ -68,7 +157,7 @@ function finishOne(index) {
 
 function sendChunk(index) {
   const start = index * chunkSize;
-  const chunk = body.slice(start, Math.min(start + chunkSize, body.length));
+  const chunk = bodyB64.slice(start, Math.min(start + chunkSize, bodyB64.length));
   const attempt = (retryCount[index] || 0) + 1;
 
   $httpClient.post({
@@ -80,6 +169,7 @@ function sendChunk(index) {
       "X-Chunk-Index": String(index),
       "X-Total-Chunks": String(totalChunks),
       "X-Upload-Attempt": String(attempt),
+      "X-Body-Encoding": "base64",
       "Content-Type": "application/octet-stream",
     },
     body: chunk,
@@ -91,6 +181,7 @@ function sendChunk(index) {
       if (isRetryable(error, resp) && (retryCount[index] || 0) < MAX_RETRIES) {
         retryCount[index] = (retryCount[index] || 0) + 1;
         const delay = RETRY_DELAY_MS[Math.min(retryCount[index] - 1, RETRY_DELAY_MS.length - 1)];
+
         log("chunk " + (index + 1) + " failed on attempt " + attempt + " (" + errorText(error, resp) + "), retry " + retryCount[index] + " in " + delay + "ms");
         setTimeout(() => sendChunk(index), delay);
         return;
