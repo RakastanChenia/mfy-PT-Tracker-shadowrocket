@@ -4,11 +4,11 @@
 // 2. 兼容 body / bodyBytes 为 ArrayBuffer、Uint8Array、base64 字符串、raw 字符串；
 // 3. 只上传模块 pattern 匹配到的目标响应。
 
-const UPLOAD_VERSION = "v4.1.1-64k-parallel-base64";
+const UPLOAD_VERSION = "v4.1.4-release-first";
 
 const upload_url = "http://167.234.217.255:8000/api/raw2";
-const chunkSize  = 64 * 1024;   // 64KB
-const PARALLEL   = 4;
+const MIN_CHUNK  = 64 * 1024;   // 64KB 起步：小包也切得开
+const BURST      = 8;           // 一轮最多派发几片（回调不会回来，必须一次发完）
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = [1000, 2000, 4000];
 
@@ -141,6 +141,14 @@ function getBase64Body() {
 }
 
 function startUpload() {
+let released = false;
+// $done 只能放行一次；提前放行后，收尾路径再调用它是无害的空操作。
+function release() {
+  if (released) return;
+  released = true;
+  $done({});
+}
+
 let url = "";
 try {
   url = (typeof $request !== "undefined" && $request.url)
@@ -154,13 +162,13 @@ log("trigger url=" + url);
 
 if (!url) {
   log("FATAL: $request.url is empty, cannot upload");
-  $done({});
+  release();
   return;
 }
 
 if (!isTargetUrl(url)) {
   log("SKIP: url not target: " + url);
-  $done({});
+  release();
   return;
 }
 
@@ -169,12 +177,15 @@ log("body source=" + bodyInfo.source + ", base64Len=" + bodyInfo.data.length);
 
 if (!bodyInfo.data || bodyInfo.data.length === 0) {
   log("FATAL: no response body data");
-  $done({});
+  release();
   return;
 }
 
 const bodyB64 = bodyInfo.data;
 const upload_id   = Math.random().toString(36).substr(2, 9);
+// 实测：$done() 之后 ~1ms 脚本上下文就 dealloc，$httpClient 的回调永远不会回来。
+// 所以只能"一次派发完、不等回执"：分片大小自适应，保证 chunks ≤ BURST，任何包体都不会被截断。
+const chunkSize  = Math.max(MIN_CHUNK, Math.ceil(bodyB64.length / BURST));
 const totalChunks = Math.ceil(bodyB64.length / chunkSize);
 const retryCount = {};
 
@@ -189,7 +200,7 @@ function finishOne(index) {
   if (completed !== totalChunks) return;
 
   log("ALL_CHUNKS_DONE upload_id=" + upload_id + ", failed=" + failed + "/" + totalChunks);
-  $done({});
+  release();
 }
 
 function sendChunk(index) {
@@ -238,9 +249,11 @@ function sendChunk(index) {
   });
 }
 
-for (let i = 0; i < Math.min(PARALLEL, totalChunks); i++) {
-  sendChunk(started++);
-}
+// 先把分片一次性交给网络栈（毫秒级，不等回执），再放行响应体 —— 游戏不再等上传。
+// ponytail: 回调里的重试/超时逻辑此后是死代码（上下文已销毁），留着只作旧版语义的兜底，可单独清理。
+for (let i = 0; i < totalChunks; i++) sendChunk(started++);
+log("DISPATCH_ALL chunks=" + totalChunks + " chunkSize=" + chunkSize + " -> release response");
+release();
 }
 
 startUpload();
