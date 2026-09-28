@@ -6,16 +6,15 @@
 
 ## 客户端
 
-文件（**内容必须保持一致**，老缓存的模块仍在按 `mfy-upload-v3.js` 这个文件名拉脚本）：
+文件：
 
-- `mfy.sgmodule`：模块配置；6 个 PJSK Response 规则全部指向 `mfy-upload.js?v=b8485c5c`。
-- `mfy-upload.js`：当前脚本（v4.1）：Base64 分片、64KB 一片、最多 4 片并行、每片最多重试 3 次（总尝试最多 4 次）。
-- `mfy-upload-v3.js`：与 `mfy-upload.js` 同内容的兼容副本，只为老模块缓存不 404。
+- `mfy.sgmodule`：模块配置；6 个 PJSK Response 规则全部指向 `mfy-upload-v3.js?v=472a04ac`。
+- `mfy-upload-v3.js`：当前脚本（v4.1.1）：Base64 分片、64KB 一片、最多 4 片并行、每片最多重试 3 次（总尝试最多 4 次）。
 
 重新导入模块后，设备日志（`[mfy-upload]`）里会打：
 
 ```text
-[mfy-upload] version=v4.1-64k-parallel-base64-debug, upload_id=xxxxxxxxx, chunks=4, base64Bytes=260000
+[mfy-upload] version=v4.1.1-64k-parallel-base64, upload_id=xxxxxxxxx, chunks=4, base64Bytes=260000
 [mfy-upload] chunk 1/4 ok attempt=1 resp={"ok":true,"queued":true,...}
 [mfy-upload] ALL_CHUNKS_DONE upload_id=xxxxxxxxx, failed=0/4
 ```

