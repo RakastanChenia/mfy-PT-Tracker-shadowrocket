@@ -4,13 +4,11 @@
 // 2. 兼容 body / bodyBytes 为 ArrayBuffer、Uint8Array、base64 字符串、raw 字符串；
 // 3. 只上传模块 pattern 匹配到的目标响应。
 
-const UPLOAD_VERSION = "v4.1.4-release-first";
+const UPLOAD_VERSION = "v4.1.5-dispatch-only";
 
 const upload_url = "http://167.234.217.255:8000/api/raw2";
 const MIN_CHUNK  = 64 * 1024;   // 64KB 起步：小包也切得开
 const BURST      = 8;           // 一轮最多派发几片（回调不会回来，必须一次发完）
-const MAX_RETRIES = 3;
-const RETRY_DELAY_MS = [1000, 2000, 4000];
 
 const TARGET_HOSTS = {
   "mkcn-prod-public-60001-1.dailygn.com": true,
@@ -19,22 +17,6 @@ const TARGET_HOSTS = {
 
 function log(message) {
   console.log("[mfy-upload] " + message);
-}
-
-function statusOf(resp) {
-  return resp && resp.status != null ? Number(resp.status) : 0;
-}
-
-function errorText(error, resp) {
-  if (error) return String(error);
-  const status = statusOf(resp);
-  return status ? ("HTTP " + status) : "no response";
-}
-
-function isRetryable(error, resp) {
-  if (error || !resp) return true;
-  const status = statusOf(resp);
-  return status === 408 || status === 425 || status === 429 || status >= 500;
 }
 
 function isTargetUrl(url) {
@@ -187,27 +169,11 @@ const upload_id   = Math.random().toString(36).substr(2, 9);
 // 所以只能"一次派发完、不等回执"：分片大小自适应，保证 chunks ≤ BURST，任何包体都不会被截断。
 const chunkSize  = Math.max(MIN_CHUNK, Math.ceil(bodyB64.length / BURST));
 const totalChunks = Math.ceil(bodyB64.length / chunkSize);
-const retryCount = {};
 
-let started = 0;
-let completed = 0;
-let failed = 0;
 
 log("version=" + UPLOAD_VERSION + ", upload_id=" + upload_id + ", chunks=" + totalChunks + ", base64Bytes=" + bodyB64.length);
-
-function finishOne(index) {
-  completed++;
-  if (completed !== totalChunks) return;
-
-  log("ALL_CHUNKS_DONE upload_id=" + upload_id + ", failed=" + failed + "/" + totalChunks);
-  release();
-}
-
 function sendChunk(index) {
   const start = index * chunkSize;
-  const chunk = bodyB64.slice(start, Math.min(start + chunkSize, bodyB64.length));
-  const attempt = (retryCount[index] || 0) + 1;
-
   $httpClient.post({
     url: upload_url,
     headers: {
@@ -216,42 +182,15 @@ function sendChunk(index) {
       "X-Upload-Id": upload_id,
       "X-Chunk-Index": String(index),
       "X-Total-Chunks": String(totalChunks),
-      "X-Upload-Attempt": String(attempt),
       "X-Body-Encoding": "base64",
       "Content-Type": "application/octet-stream",
     },
-    body: chunk,
-  }, (error, resp, data) => {
-    const status = statusOf(resp);
-    const ok = !error && status === 200;
-
-    if (!ok) {
-      log("chunk " + (index + 1) + "/" + totalChunks + " attempt " + attempt + " failed: " + errorText(error, resp));
-
-      if (isRetryable(error, resp) && (retryCount[index] || 0) < MAX_RETRIES) {
-        retryCount[index] = (retryCount[index] || 0) + 1;
-        const delay = RETRY_DELAY_MS[Math.min(retryCount[index] - 1, RETRY_DELAY_MS.length - 1)];
-        log("chunk " + (index + 1) + " retry " + retryCount[index] + " in " + delay + "ms");
-        setTimeout(() => sendChunk(index), delay);
-        return;
-      }
-
-      failed++;
-      log("chunk " + (index + 1) + " permanently failed");
-      finishOne(index);
-      if (started < totalChunks) sendChunk(started++);
-      return;
-    }
-
-    log("chunk " + (index + 1) + "/" + totalChunks + " ok attempt=" + attempt + (data ? " resp=" + String(data).slice(0, 120) : ""));
-    finishOne(index);
-    if (completed < totalChunks && started < totalChunks) sendChunk(started++);
-  });
+    body: bodyB64.slice(start, Math.min(start + chunkSize, bodyB64.length)),
+  }, function () {});   // 回调永远不会回来（$done 后上下文立即销毁），空函数只为满足 API 签名
 }
 
-// 先把分片一次性交给网络栈（毫秒级，不等回执），再放行响应体 —— 游戏不再等上传。
-// ponytail: 回调里的重试/超时逻辑此后是死代码（上下文已销毁），留着只作旧版语义的兜底，可单独清理。
-for (let i = 0; i < totalChunks; i++) sendChunk(started++);
+// 一次性把分片交给网络栈（毫秒级），随后立刻放行响应体 —— 游戏不等上传。
+for (let i = 0; i < totalChunks; i++) sendChunk(i);
 log("DISPATCH_ALL chunks=" + totalChunks + " chunkSize=" + chunkSize + " -> release response");
 release();
 }

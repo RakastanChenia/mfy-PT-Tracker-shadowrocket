@@ -1,8 +1,8 @@
-# MFY PT Tracker Shadowrocket 模块 v4.1.4
+# MFY PT Tracker Shadowrocket 模块 v4.1.5
 
 在设备上抓国服 PJSK 的活动 / 排名响应，Base64 后上传到自建 tracker（`POST /api/raw2`）。
 
-## v4.1.4 改了什么：先派发、再放行
+## v4.1.4 / v4.1.5 改了什么：先派发、再放行
 
 旧版把响应体扣在脚本里，等所有分片传完才 `$done()` —— 游戏要白等整段上传时间（实测 **810ms**）。
 
@@ -32,25 +32,26 @@
 
 - **没有应用层重试了**：回调不会回来，就收不到分片回执，也就不可能重试。单片失败这一次就丢，等下一次响应补上；服务端 `/api/raw2` 按 `upload_id` 幂等，重复 / 乱序到达都安全。
 - 圣何塞链路上实测（120 次上传 / 325 个分片）**重试一次都没触发过**，所以这个取舍没有实测代价。
+- v4.1.5 把那段"回调永远不会触发"的重试 / 超时 / 逐片日志代码**整段删掉**（260 → 199 行），脚本只剩「编码 → 派发 → 放行」三步，不留任何等回执的分支。
 - 分片大小实测（真实 90,880B 包、50 次配对压测）：**64KB（2 片）中位 765ms 略优**；128KB 及以上全部退化为 1 片、中位 875~884ms。**结论：维持 64KB。**
 
 ## 客户端
 
 | 文件 | 说明 |
 |---|---|
-| `mfy.sgmodule` | 模块配置，6 条 PJSK Response 规则都指向 `mfy-upload-v3.js?v=e1a43182` |
-| `mfy-upload-v3.js` | 当前脚本（v4.1.4） |
+| `mfy.sgmodule` | 模块配置，6 条 PJSK Response 规则都指向 `mfy-upload-v3.js?v=f5bbcc27` |
+| `mfy-upload-v3.js` | 当前脚本（v4.1.5） |
 
 重新导入模块后，设备日志（`[mfy-upload]`）里会打：
 
 ```text
-[mfy-upload] version=v4.1.4-release-first, upload_id=xxxxxxxxx, chunks=2, base64Bytes=121176
+[mfy-upload] version=v4.1.5-dispatch-only, upload_id=xxxxxxxxx, chunks=2, base64Bytes=121176
 [mfy-upload] DISPATCH_ALL chunks=2 chunkSize=65536 -> release response
 ```
 
 **不会再出现**旧版的 `chunk 1/2 ok …` / `ALL_CHUNKS_DONE …` —— 回调已经不存在了，这是预期，不是坏了。
 
-服务端日志里对应 `[RAW2] 分片已保存 … encoding=base64 ver=v4.1.4-release-first ua=Shadowrocket/…`，
+服务端日志里对应 `[RAW2] 分片已保存 … encoding=base64 ver=v4.1.5-dispatch-only ua=Shadowrocket/…`，
 拼装完成后是 `[RAW2] 后台处理完成 … state=completed`；若看到 `state=rejected` + `decrypt_failed`，说明设备还在跑旧脚本，重导模块即可。
 
 ## 服务端
