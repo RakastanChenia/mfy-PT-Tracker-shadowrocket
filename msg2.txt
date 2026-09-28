@@ -1,0 +1,10 @@
+revert(sgmodule): pattern 回到作者原始严版（去掉 (?.*)? / .* 放宽）
+
+aa863cc 那版把 6 条 pattern 放宽成 (?.*)?$ / ?.*type=result.*$，与作者更早的原始
+定义（ddd7a95…ffd414d 一路未变）不一致。作者本意是严匹配，改回：
+
+  tutorial/harvest$ · mysekai/harvest$ · live/[^?]+$ · multi-live/[^?]+$
+  challenge-live/solo/[^?]+$ · rank-match-season/\d+/live/[^?]+\?type=result$
+
+改动仅限 mfy.sgmodule 的 6 条 pattern；脚本指纹仍为 472a04ac，文件名仍为 mfy-upload-v3.js。
+顺带删掉误提交的 commit-msg.txt。
