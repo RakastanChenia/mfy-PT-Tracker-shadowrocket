@@ -1,14 +1,14 @@
-#!name=MFY PT Tracker 自动上报（v5.0.0）
-#!desc=自动上传国服活动PT/排名数据（v5.0.0 · 原始字节 identity 上行 -25% · 脚本 v4.3-uint8array-identity · 指纹 8db9e559）
+#!name=MFY PT Tracker 自动上报（v5.0.1）
+#!desc=自动上传国服活动PT/排名数据 · v5.0.1 修复数据损坏：原始字节(identity)只用于单片(<=64KB)，多片自动回退 Base64 —— 实测 Shadowrocket 对 typed array 子视图（第 2 片起 byteOffset!=0）会送错字节，v5.0.0 的大包（成绩/排位）会解密失败丢数据 · 脚本 v5.0.1-identity-1chunk · 指纹 0c033143
 #!homepage=https://github.com/RakastanChenia/mfy-PT-Tracker-shadowrocket
 
 [MITM]
 hostname = %APPEND% mkcn-prod-public-60001-1.dailygn.com, mkcn-prod-public-60001-2.dailygn.com
 
 [Script]
-mfy-upload-tutorial = type=http-response,pattern=^https://mkcn-prod-public-60001-(1|2)\.dailygn\.com/api/user/\d+/mysekai/tutorial/harvest(\?.*)?$,requires-body=1,binary-body-mode=1,max-size=100000000,timeout=120,script-path=https://sub.167.234.217.255.sslip.io/mfy/mfy-upload-v4.js?v=8db9e559
-mfy-upload-harvest = type=http-response,pattern=^https://mkcn-prod-public-60001-(1|2)\.dailygn\.com/api/user/\d+/mysekai/harvest(\?.*)?$,requires-body=1,binary-body-mode=1,max-size=100000000,timeout=120,script-path=https://sub.167.234.217.255.sslip.io/mfy/mfy-upload-v4.js?v=8db9e559
-mfy-upload-live = type=http-response,pattern=^https://mkcn-prod-public-60001-(1|2)\.dailygn\.com/api/user/\d+/live/[^?]+(\?.*)?$,requires-body=1,binary-body-mode=1,max-size=100000000,timeout=120,script-path=https://sub.167.234.217.255.sslip.io/mfy/mfy-upload-v4.js?v=8db9e559
-mfy-upload-multi = type=http-response,pattern=^https://mkcn-prod-public-60001-(1|2)\.dailygn\.com/api/user/\d+/multi-live/[^?]+(\?.*)?$,requires-body=1,binary-body-mode=1,max-size=100000000,timeout=120,script-path=https://sub.167.234.217.255.sslip.io/mfy/mfy-upload-v4.js?v=8db9e559
-mfy-upload-challenge = type=http-response,pattern=^https://mkcn-prod-public-60001-(1|2)\.dailygn\.com/api/user/\d+/challenge-live/solo/[^?]+(\?.*)?$,requires-body=1,binary-body-mode=1,max-size=100000000,timeout=120,script-path=https://sub.167.234.217.255.sslip.io/mfy/mfy-upload-v4.js?v=8db9e559
-mfy-upload-rank = type=http-response,pattern=^https://mkcn-prod-public-60001-(1|2)\.dailygn\.com/api/user/\d+/rank-match-season/\d+/live/[^?]+\?.*type=result.*$,requires-body=1,binary-body-mode=1,max-size=100000000,timeout=120,script-path=https://sub.167.234.217.255.sslip.io/mfy/mfy-upload-v4.js?v=8db9e559
+mfy-upload-tutorial = type=http-response,pattern=^https://mkcn-prod-public-60001-(1|2)\.dailygn\.com/api/user/\d+/mysekai/tutorial/harvest(\?.*)?$,requires-body=1,binary-body-mode=1,max-size=100000000,timeout=120,script-path=https://sub.167.234.217.255.sslip.io/mfy/mfy-upload-v501.js?v=0c033143
+mfy-upload-harvest = type=http-response,pattern=^https://mkcn-prod-public-60001-(1|2)\.dailygn\.com/api/user/\d+/mysekai/harvest(\?.*)?$,requires-body=1,binary-body-mode=1,max-size=100000000,timeout=120,script-path=https://sub.167.234.217.255.sslip.io/mfy/mfy-upload-v501.js?v=0c033143
+mfy-upload-live = type=http-response,pattern=^https://mkcn-prod-public-60001-(1|2)\.dailygn\.com/api/user/\d+/live/[^?]+(\?.*)?$,requires-body=1,binary-body-mode=1,max-size=100000000,timeout=120,script-path=https://sub.167.234.217.255.sslip.io/mfy/mfy-upload-v501.js?v=0c033143
+mfy-upload-multi = type=http-response,pattern=^https://mkcn-prod-public-60001-(1|2)\.dailygn\.com/api/user/\d+/multi-live/[^?]+(\?.*)?$,requires-body=1,binary-body-mode=1,max-size=100000000,timeout=120,script-path=https://sub.167.234.217.255.sslip.io/mfy/mfy-upload-v501.js?v=0c033143
+mfy-upload-challenge = type=http-response,pattern=^https://mkcn-prod-public-60001-(1|2)\.dailygn\.com/api/user/\d+/challenge-live/solo/[^?]+(\?.*)?$,requires-body=1,binary-body-mode=1,max-size=100000000,timeout=120,script-path=https://sub.167.234.217.255.sslip.io/mfy/mfy-upload-v501.js?v=0c033143
+mfy-upload-rank = type=http-response,pattern=^https://mkcn-prod-public-60001-(1|2)\.dailygn\.com/api/user/\d+/rank-match-season/\d+/live/[^?]+\?.*type=result.*$,requires-body=1,binary-body-mode=1,max-size=100000000,timeout=120,script-path=https://sub.167.234.217.255.sslip.io/mfy/mfy-upload-v501.js?v=0c033143
