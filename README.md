@@ -1,8 +1,23 @@
-# MFY PT Tracker Shadowrocket 模块 v5.0.1
+# MFY PT Tracker Shadowrocket 模块 v5.0.2（暂时回滚版）
 
 在设备上抓国服 PJSK 的活动 / 排名响应，上传到自建 tracker（`POST /api/raw2`）。
 
-## ⚠️ v5.0.1 修复：>64KB 的多片包改回 Base64（v5.0.0 会丢成绩数据）
+## ⏸️ v5.0.2：暂时回滚到纯 Base64（identity 全停用）
+
+v5.0.1 已把 `identity` 限制在 ≤64KB 单片包，但用户设备又中了一次：`live` **97,024 B（2 片）**
+→ `decrypt_failed: 无效 padding：0`，该局的周回/成绩没能入库。
+
+`identity` 只在大包上收益明显，而大包正是"成绩 / 排位"这类**丢了补不回来**的数据 —— 因此暂时**全部回滚到 Base64**：
+
+| | Base64（当前） | identity（已停用） |
+|---|---|---|
+| 上行体积 | +33%（90,880 B → 121,176 B） | 原始大小 |
+| 设备 CPU | 多约 31ms/包（Base64 编码） | 无 |
+| 可靠性 | 实测 **313/313 ≈ 100%** | 多片包内容会被改写（小火箭 typed array 子视图 bug） |
+
+代码里保留 `identity` 分支（`IDENTITY_MAX_BYTES = 0` 即停用），等有**内容级验证**之后再把上限调回去。
+
+## ⚠️ v5.0.1（历史，治标）：>64KB 的多片包回退 Base64
 
 **症状**：v5.0.0 用原始字节（`identity`）上传。实测某台设备（iPad16,5 / Shadowrocket 2701）两局数据 `state=rejected`：
 
@@ -48,20 +63,21 @@ v4.1.5 及以前走 Base64：90,880 B 的响应体要发 121,176 B（+33%）。v
 
 | 文件 | 说明 |
 |---|---|
-| `mfy.sgmodule` | 模块配置，6 条 PJSK Response 规则，脚本指向线上 `mfy-upload-v501.js?v=0c033143`（**单一事实源**：改脚本只动服务端，不用改仓库） |
-| `mfy-upload-v501.js` | **当前脚本**（`UPLOAD_VERSION = "v5.0.1-identity-1chunk"`，sha256 `0c033143a62c09dd…`）—— 与线上同名字节一致，仓库内留档 |
+| `mfy.sgmodule` | 模块配置，6 条 PJSK Response 规则，脚本指向线上 `mfy-upload-v502.js?v=a9aaafc1`（**单一事实源**：改脚本只动服务端，不用改仓库） |
+| `mfy-upload-v502.js` | **当前脚本**（`UPLOAD_VERSION = "v5.0.2-base64-rollback"`，sha256 `a9aaafc152fa22d7…`）—— 全部走 Base64 |
+| `mfy-upload-v501.js` | v5.0.1：`identity` 仅 ≤64KB 单片（治标版）（`UPLOAD_VERSION = "v5.0.1-identity-1chunk"`，sha256 `0c033143a62c09dd…`）—— 与线上同名字节一致，仓库内留档 |
 | `mfy-upload-v4.js` | 历史脚本（v5.0.0 · `v4.3-uint8array-identity`）—— **有多片丢内容的 bug，别再用** |
 | `mfy-upload-v3.js` | 历史脚本（v4.1.5 · Base64），更早的版本 |
 
 若想改成从本仓库 raw 加载脚本，把 `script-path` 换成
-`https://raw.githubusercontent.com/RakastanChenia/mfy-PT-Tracker-shadowrocket/main/mfy-upload-v501.js?v=0c033143` 即可。
+`https://raw.githubusercontent.com/RakastanChenia/mfy-PT-Tracker-shadowrocket/main/mfy-upload-v502.js?v=a9aaafc1` 即可。
 
 重新导入模块后，设备日志（`[mfy-upload]`）里会打：
 
 ```text
-[mfy-upload] version=v5.0.1-identity-1chunk, upload_id=xxxxxxxxx, mode=identity, source=bodyBytes:Uint8Array:12928, bytes=12928, chunks=1
-[mfy-upload] DISPATCH_ALL mode=identity chunks=1 -> release response
-[mfy-upload] version=v5.0.1-identity-1chunk, upload_id=yyyyyyyyy, mode=base64, source=bodyBytes:Uint8Array:328112, bytes=437484, chunks=7
+[mfy-upload] version=v5.0.2-base64-rollback, upload_id=xxxxx, mode=base64, source=bodyBytes:Uint8Array:12928, bytes=17240, chunks=1
+[mfy-upload] DISPATCH_ALL mode=base64 chunks=1 -> release response
+[mfy-upload] version=v5.0.2-base64-rollback, upload_id=yyyyy, mode=base64, source=bodyBytes:Uint8Array:328112, bytes=437484, chunks=7
 [mfy-upload] DISPATCH_ALL mode=base64 chunks=7 -> release response
 ```
 
@@ -113,8 +129,7 @@ PJSK Response
     ↓
 Shadowrocket MITM（binary-body-mode=1）
     ↓
-≤64KB 单片 → 原始字节（X-Body-Encoding: identity）   ← v5.0.1
->64KB 多片 → Base64（X-Body-Encoding: base64）        ← 小火箭子视图会送错字节，大包必须回退
+Base64 编码（X-Body-Encoding: base64）        ← v5.0.2：identity 已停用
     ↓
 max(64KB, len/8) 分片，一次性并行 POST        ← 1~2ms
     ↓
@@ -125,6 +140,7 @@ $done() 放行响应体，游戏继续
 
 ## 版本
 
-- **v5.0.1**（当前）：修复 v5.0.0 的多片丢数据 —— `identity` 仅用于 ≤64KB 单片包，>64KB 回退 Base64。
+- **v5.0.2**（当前）：暂时回滚 —— 停用 `identity`，全部走 Base64（100% 可解密；体积/CPU 回到 v4.1.5 水平）。
+- v5.0.1：`identity` 仅用于 ≤64KB 单片包，>64KB 回退 Base64（治标，已弃用）。
 - v5.0.0：（**有 bug，勿用**）原始字节上传；小包省 25%，但 >64KB 多片会送错字节导致解密失败。
 - v4.1.5：Base64 通道 + 先派发再放行（游戏侧等待 810ms → 33ms）。
